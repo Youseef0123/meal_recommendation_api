@@ -23,12 +23,31 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 
-# تعديل إعدادات CORS لتكون أكثر مرونة
+# تكوين CORS بشكل أكثر مرونة
 CORS(app, resources={r"/api/*": {
     "origins": "*",
     "methods": ["GET", "POST", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }})
+
+# معالجة preflight requests بشكل صريح
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        return response
+
+# تعديل after_request للتأكد من إضافة رؤوس CORS
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    return response
+
 
 
 

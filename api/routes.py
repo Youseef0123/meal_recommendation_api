@@ -263,16 +263,36 @@ def register_routes(app, global_model):
 
 
 
+
 def register_routes(app, global_model):
-    # تعديل كل endpoint ليضيف رؤوس CORS
     @app.route('/api/predict', methods=['POST', 'OPTIONS'])
     def predict():
+        # معالجة preflight request
         if request.method == 'OPTIONS':
             response = make_response()
             response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
             response.headers.add('Access-Control-Allow-Methods', 'POST')
             return response
         
-        # باقي كود الدالة كما هو
-        ...
+        # باقي كود الدالة
+        try:
+            # الكود الموجود
+            ...
+            
+            # تأكد من إضافة رؤوس CORS في الاستجابة
+            response = jsonify({
+                "status": "success",
+                "recommendations": serializable_recommendations
+            })
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response
+        
+        except Exception as e:
+            # تأكد من إضافة رؤوس CORS حتى في حالة الخطأ
+            error_response = jsonify({
+                "error": str(e),
+                "status": "error"
+            })
+            error_response.headers.add('Access-Control-Allow-Origin', '*')
+            return error_response, 500
