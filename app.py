@@ -15,6 +15,7 @@ import datetime
 import traceback
 import datetime
 from sklearn.preprocessing import StandardScaler
+from utils.health_filters import apply_health_condition_filters
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -588,12 +589,19 @@ def predict():
                 "status": "error"
             }), 500
         
+
+        #the change here for disease
+        serializable_recommendations = apply_health_condition_filters(serializable_recommendations, user_data)
+        
+
         logger.info("Successfully processed prediction request")
         return jsonify({
             "status": "success",
             "recommendations": serializable_recommendations
         })
         
+
+
     except Exception as e:
         logger.error(f"Unexpected error in predict: {str(e)}")
         logger.error(traceback.format_exc())
@@ -603,7 +611,7 @@ def predict():
         }), 500
     
 
-    
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
