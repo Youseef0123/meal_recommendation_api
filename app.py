@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 # Create the application
 app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
 
 # Configure CORS to allow requests from any origin
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -486,4 +488,3 @@ if __name__ == "__main__":
 
 
 
-      
