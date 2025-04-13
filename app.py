@@ -10,7 +10,8 @@ import pickle
 import pandas as pd
 import numpy as np
 import logging
-
+from flask import Flask, jsonify, request, make_response
+from flask_cors import CORS
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -20,8 +21,24 @@ logger = logging.getLogger(__name__)
 
 # Create the application
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+
+# تعديل إعدادات CORS لتكون أكثر مرونة
+CORS(app, resources={r"/api/*": {
+    "origins": "*",
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
+
+
+
+# إضافة دعم OPTIONS للتعامل مع preflight requests
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 # Configure CORS to allow requests from any origin
 CORS(app, resources={r"/api/*": {"origins": "*"}})

@@ -10,6 +10,7 @@ import logging
 import traceback
 from models.meal_recommendation import ImprovedMealRecommendationModel
 from utils.serializers import convert_to_serializable
+from flask import make_response
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -257,3 +258,21 @@ def register_routes(app, global_model):
                         mimetype='application/octet-stream',
                         as_attachment=True,
                         download_name='meal_recommendation_model.pkl')
+    
+
+
+
+
+def register_routes(app, global_model):
+    # تعديل كل endpoint ليضيف رؤوس CORS
+    @app.route('/api/predict', methods=['POST', 'OPTIONS'])
+    def predict():
+        if request.method == 'OPTIONS':
+            response = make_response()
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Methods', 'POST')
+            return response
+        
+        # باقي كود الدالة كما هو
+        ...
