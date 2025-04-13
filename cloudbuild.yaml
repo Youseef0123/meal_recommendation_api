@@ -23,3 +23,7 @@ steps:
 
 images:
 - 'gcr.io/$PROJECT_ID/meal-recommendation-api:$COMMIT_SHA'
+
+# إضافة خيارات التسجيل
+options:
+  logging: CLOUD_LOGGING_ONLY
