@@ -2,7 +2,7 @@
 API route definitions for the meal recommendation system
 """
 
-from flask import request, jsonify, send_file, current_app
+from flask import request, jsonify, send_file, current_app, make_response
 import os
 import pickle
 import pandas as pd
@@ -10,7 +10,6 @@ import logging
 import traceback
 from models.meal_recommendation import ImprovedMealRecommendationModel
 from utils.serializers import convert_to_serializable
-from flask import make_response
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -109,7 +108,7 @@ def register_routes(app, global_model):
                 "status": "error"
             }), 500
 
-    @app.route('/api/predict', methods=['POST'])
+    @app.route('/api/predict', methods=['POST', 'OPTIONS'])
     def predict():
         """
         Get meal recommendations for user data
@@ -118,6 +117,14 @@ def register_routes(app, global_model):
         Response: JSON with meal recommendations
         """
         nonlocal global_model
+
+        # Handle preflight request
+        if request.method == 'OPTIONS':
+            response = make_response()
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            response.headers.add('Access-Control-Allow-Methods', 'POST')
+            return response
         
         try:
             logger.info("Received prediction request")
@@ -134,16 +141,20 @@ def register_routes(app, global_model):
                         logger.info("Successfully loaded model from disk")
                     except Exception as e:
                         logger.error(f"Failed to load model: {str(e)}")
-                        return jsonify({
+                        error_response = jsonify({
                             "error": "Could not load model from disk",
                             "status": "error"
-                        }), 500
+                        })
+                        error_response.headers.add('Access-Control-Allow-Origin', '*')
+                        return error_response, 500
                 else:
                     logger.error("No trained model available")
-                    return jsonify({
+                    error_response = jsonify({
                         "error": "Model not trained. Please train the model first.",
                         "status": "error"
-                    }), 400
+                    })
+                    error_response.headers.add('Access-Control-Allow-Origin', '*')
+                    return error_response, 400
             
             # Get user data from request
             user_data = request.json
@@ -157,10 +168,12 @@ def register_routes(app, global_model):
             for field in required_fields:
                 if field not in user_data:
                     logger.warning(f"Missing required field: {field}")
-                    return jsonify({
+                    error_response = jsonify({
                         "error": f"Missing required field: {field}",
                         "status": "error"
-                    }), 400
+                    })
+                    error_response.headers.add('Access-Control-Allow-Origin', '*')
+                    return error_response, 400
             
             # Set default values for optional fields
             if "has_diabetes" not in user_data:
@@ -187,10 +200,12 @@ def register_routes(app, global_model):
                 user_data["dietary_preference"] = int(user_data["dietary_preference"])
             except ValueError as e:
                 logger.error(f"Type conversion error: {str(e)}")
-                return jsonify({
+                error_response = jsonify({
                     "error": f"Invalid data type: {str(e)}",
                     "status": "error"
-                }), 400
+                })
+                error_response.headers.add('Access-Control-Allow-Origin', '*')
+                return error_response, 400
                 
             # Encode user input if needed
             try:
@@ -199,10 +214,12 @@ def register_routes(app, global_model):
             except Exception as e:
                 logger.error(f"Error encoding user input: {str(e)}")
                 logger.error(traceback.format_exc())
-                return jsonify({
+                error_response = jsonify({
                     "error": f"Error encoding user data: {str(e)}",
                     "status": "error"
-                }), 500
+                })
+                error_response.headers.add('Access-Control-Allow-Origin', '*')
+                return error_response, 500
             
             # Get recommendations
             try:
@@ -212,10 +229,12 @@ def register_routes(app, global_model):
             except Exception as e:
                 logger.error(f"Error predicting recommendations: {str(e)}")
                 logger.error(traceback.format_exc())
-                return jsonify({
+                error_response = jsonify({
                     "error": f"Error generating recommendations: {str(e)}",
                     "status": "error"
-                }), 500
+                })
+                error_response.headers.add('Access-Control-Allow-Origin', '*')
+                return error_response, 500
             
             # Convert to serializable format
             try:
@@ -224,24 +243,30 @@ def register_routes(app, global_model):
             except Exception as e:
                 logger.error(f"Error serializing recommendations: {str(e)}")
                 logger.error(traceback.format_exc())
-                return jsonify({
+                error_response = jsonify({
                     "error": f"Error processing results: {str(e)}",
                     "status": "error"
-                }), 500
+                })
+                error_response.headers.add('Access-Control-Allow-Origin', '*')
+                return error_response, 500
             
             logger.info("Successfully processed prediction request")
-            return jsonify({
+            response = jsonify({
                 "status": "success",
                 "recommendations": serializable_recommendations
             })
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response
             
         except Exception as e:
             logger.error(f"Unexpected error in predict: {str(e)}")
             logger.error(traceback.format_exc())
-            return jsonify({
+            error_response = jsonify({
                 "error": str(e),
                 "status": "error"
-            }), 500
+            })
+            error_response.headers.add('Access-Control-Allow-Origin', '*')
+            return error_response, 500
 
     @app.route('/api/download_model', methods=['GET'])
     def download_model():
@@ -258,41 +283,3 @@ def register_routes(app, global_model):
                         mimetype='application/octet-stream',
                         as_attachment=True,
                         download_name='meal_recommendation_model.pkl')
-    
-
-
-
-
-
-def register_routes(app, global_model):
-    @app.route('/api/predict', methods=['POST', 'OPTIONS'])
-    def predict():
-        # معالجة preflight request
-        if request.method == 'OPTIONS':
-            response = make_response()
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-            response.headers.add('Access-Control-Allow-Methods', 'POST')
-            return response
-        
-        # باقي كود الدالة
-        try:
-            # الكود الموجود
-            ...
-            
-            # تأكد من إضافة رؤوس CORS في الاستجابة
-            response = jsonify({
-                "status": "success",
-                "recommendations": serializable_recommendations
-            })
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            return response
-        
-        except Exception as e:
-            # تأكد من إضافة رؤوس CORS حتى في حالة الخطأ
-            error_response = jsonify({
-                "error": str(e),
-                "status": "error"
-            })
-            error_response.headers.add('Access-Control-Allow-Origin', '*')
-            return error_response, 500
