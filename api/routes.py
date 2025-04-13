@@ -10,7 +10,8 @@ import logging
 import traceback
 from models.meal_recommendation import ImprovedMealRecommendationModel
 from utils.serializers import convert_to_serializable
-
+from google.cloud import storage
+import os
 # Configure logger
 logger = logging.getLogger(__name__)
 
@@ -268,18 +269,43 @@ def register_routes(app, global_model):
             error_response.headers.add('Access-Control-Allow-Origin', '*')
             return error_response, 500
 
-    @app.route('/api/download_model', methods=['GET'])
-    def download_model():
-        """
-        Download the trained model
-        """
-        if not os.path.exists('trained_model.pkl'):
-            return jsonify({
-                "error": "No trained model available",
-                "status": "error"
-            }), 404
-        
-        return send_file('trained_model.pkl', 
-                        mimetype='application/octet-stream',
-                        as_attachment=True,
-                        download_name='meal_recommendation_model.pkl')
+# اسم الباكت بالظبط
+BUCKET_NAME = "global-sun-456710-t3-models"
+
+# اسم الملف جوه الباكت (الـ blob name)
+MODEL_BLOB_NAME = "trained_model.pkl"
+
+# مكان حفظ الملف مؤقتاً على السيرفر بعد التحميل
+LOCAL_MODEL_PATH = "trained_model.pkl"
+
+def download_model_from_bucket():
+    if not os.path.exists(LOCAL_MODEL_PATH):
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(MODEL_BLOB_NAME)
+        blob.download_to_filename(LOCAL_MODEL_PATH)
+        print("✅ Model downloaded from bucket.")
+
+@app.route('/api/download_model', methods=['GET'])
+def download_model():
+    """
+    Download the trained model
+    """
+    try:
+        download_model_from_bucket()
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+    if not os.path.exists(LOCAL_MODEL_PATH):
+        return jsonify({
+            "error": "No trained model available",
+            "status": "error"
+        }), 404
+
+    return send_file(LOCAL_MODEL_PATH, 
+                     mimetype='application/octet-stream',
+                     as_attachment=True,
+                     download_name='meal_recommendation_model.pkl')
