@@ -3,15 +3,14 @@ Main application entry point
 Runs the Flask server and registers API routes
 """
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 import os
 import pickle
 import pandas as pd
 import numpy as np
 import logging
-from flask import Flask, jsonify, request, make_response
-from flask_cors import CORS
+
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -22,45 +21,8 @@ logger = logging.getLogger(__name__)
 # Create the application
 app = Flask(__name__)
 
-
-# تكوين CORS بشكل أكثر مرونة
-CORS(app, resources={r"/api/*": {
-    "origins": "*",
-    "methods": ["GET", "POST", "OPTIONS"],
-    "allow_headers": ["Content-Type", "Authorization"]
-}})
-
-# معالجة preflight requests بشكل صريح
-@app.before_request
-def handle_preflight():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-        return response
-
-# تعديل after_request للتأكد من إضافة رؤوس CORS
-@app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
-    return response
-
-
-
-
-# إضافة دعم OPTIONS للتعامل مع preflight requests
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
-
-# Configure CORS to allow requests from any origin
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# Configure CORS properly - this should be done only once
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 # Global variable to store the trained model
 trained_model = None
@@ -519,7 +481,7 @@ def predict():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
-      
+
 
 
 
