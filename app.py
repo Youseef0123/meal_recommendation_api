@@ -31,8 +31,7 @@ trained_model = None
 from utils.gcs_storage import load_model_from_gcs
 
 # اسم الخزانة (Bucket)
-GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'global-sun-456710-13-models')
-
+GCS_BUCKET_NAME = 'global-sun-456710-13-models'
 # تحميل النموذج المدرب
 trained_model = None
 model_path = 'trained_model.pkl'

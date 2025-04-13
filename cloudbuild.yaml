@@ -1,13 +1,10 @@
 steps:
-# Build the container image
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'gcr.io/$PROJECT_ID/meal-recommendation-api:$COMMIT_SHA', '.']
 
-# Push the container image to Container Registry
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'gcr.io/$PROJECT_ID/meal-recommendation-api:$COMMIT_SHA']
 
-# Deploy container image to Cloud Run
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
@@ -22,11 +19,7 @@ steps:
   - 'us-central1'
   - '--allow-unauthenticated'
   - '--set-env-vars'
-  - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
+  - 'GCS_BUCKET_NAME=global-sun-456710-13-models,GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
 
 images:
 - 'gcr.io/$PROJECT_ID/meal-recommendation-api:$COMMIT_SHA'
-
-# إضافة خيارات البناء لحل مشكلة التسجيل
-options:
-  logging: CLOUD_LOGGING_ONLY
