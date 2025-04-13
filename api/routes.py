@@ -283,29 +283,11 @@ def download_model_from_bucket():
         storage_client = storage.Client()
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(MODEL_BLOB_NAME)
-        blob.download_to_filename(LOCAL_MODEL_PATH)
-        print("✅ Model downloaded from bucket.")
-
-@app.route('/api/download_model', methods=['GET'])
-def download_model():
-    """
-    Download the trained model
-    """
-    try:
-        download_model_from_bucket()
-    except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "status": "error"
-        }), 500
-
-    if not os.path.exists(LOCAL_MODEL_PATH):
-        return jsonify({
-            "error": "No trained model available",
-            "status": "error"
-        }), 404
-
-    return send_file(LOCAL_MODEL_PATH, 
-                     mimetype='application/octet-stream',
-                     as_attachment=True,
-                     download_name='meal_recommendation_model.pkl')
+        try:
+            blob.download_to_filename(LOCAL_MODEL_PATH)
+            print("✅ Model downloaded from bucket.")
+            return True
+        except Exception as e:
+            print(f"❌ Error downloading model: {str(e)}")
+            return False
+    return True

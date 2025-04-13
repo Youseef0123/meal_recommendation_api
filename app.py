@@ -10,6 +10,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import logging
+import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -22,7 +23,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Configure CORS properly - this should be done only once
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": "*"}}, 
+     methods=["GET", "POST", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"],
+     supports_credentials=True)
+
+# Make sure all API responses include CORS headers
+@app.after_request
+def add_cors_headers(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    return response
 
 # Global variable to store the trained model
 trained_model = None
@@ -31,36 +43,48 @@ trained_model = None
 from utils.gcs_storage import load_model_from_gcs
 
 # اسم الخزانة (Bucket)
-GCS_BUCKET_NAME = 'global-sun-456710-13-models'
+GCS_BUCKET_NAME = 'global-sun-456710-t3-models'
 # تحميل النموذج المدرب
 trained_model = None
 model_path = 'trained_model.pkl'
-if os.environ.get('GOOGLE_CLOUD_PROJECT'):
-    # محاولة تحميل النموذج من Google Cloud Storage
-    try:
-        trained_model = load_model_from_gcs(GCS_BUCKET_NAME)
-        logger.info(f"Successfully loaded trained model from GCS bucket: {GCS_BUCKET_NAME}")
-    except Exception as e:
-        logger.warning(f"No trained model found in GCS: {str(e)}")
-        # محاولة تحميل من الملف المحلي
-        if os.path.exists(model_path):
-            try:
-                with open(model_path, 'rb') as f:
-                    trained_model = pickle.load(f)
-                logger.info(f"Successfully loaded trained model from local file")
-            except Exception as e:
-                logger.error(f"Error loading model from local file: {str(e)}")
-else:
-    # تحميل النموذج المحلي (للتطوير المحلي)
-    if os.path.exists(model_path):
-        try:
-            with open(model_path, 'rb') as f:
-                trained_model = pickle.load(f)
-            logger.info(f"Successfully loaded trained model from {model_path}")
-        except Exception as e:
-            logger.error(f"Error loading model from {model_path}: {str(e)}")
+
+# First try to load from GCS
+try:
+    logger.info(f"Attempting to load model from GCS bucket: {GCS_BUCKET_NAME}")
+    trained_model = load_model_from_gcs(GCS_BUCKET_NAME)
+    if trained_model is not None:
+        logger.info(f"Successfully loaded trained model from GCS bucket")
     else:
-        logger.warning(f"No trained model found at {model_path}")
+        logger.warning(f"No model found in GCS bucket: {GCS_BUCKET_NAME}")
+except Exception as e:
+    logger.warning(f"Error loading from GCS: {str(e)}")
+
+# If GCS loading failed, try local file
+if trained_model is None and os.path.exists(model_path):
+    try:
+        logger.info(f"Attempting to load model from local file: {model_path}")
+        with open(model_path, 'rb') as f:
+            trained_model = pickle.load(f)
+        logger.info(f"Successfully loaded trained model from local file")
+    except Exception as e:
+        logger.error(f"Error loading model from local file: {str(e)}")
+
+# If still no model, create a dummy model for testing
+if trained_model is None:
+    logger.warning("No model found. Creating a dummy model for testing")
+    from models.meal_recommendation import ImprovedMealRecommendationModel
+    trained_model = ImprovedMealRecommendationModel(k=15)
+    
+    # Add dummy data structure
+    trained_model.raw_data = None
+    trained_model.activity_multipliers = {
+        0: 1.2,  # Sedentary
+        1: 1.375,  # Lightly Active
+        2: 1.55,  # Moderately Active
+        3: 1.725,  # Very Active
+        4: 1.9  # Extremely Active
+    }
+    logger.info("Created dummy model as fallback")
 
 # Add the missing get_meal_nutrition method to the model
 if trained_model is not None and not hasattr(trained_model, 'get_meal_nutrition'):
@@ -197,6 +221,62 @@ def health_check():
         "status": "healthy",
         "message": "Meal Recommendation API is running",
         "model_loaded": trained_model is not None
+    })
+
+@app.route('/api/system-check', methods=['GET'])
+def system_check():
+    """
+    Enhanced health check with detailed system information
+    """
+    import platform
+    import sys
+    
+    # Check if GCS credentials are accessible
+    has_gcs_credentials = False
+    try:
+        from google.cloud import storage
+        client = storage.Client()
+        # Try listing buckets as a test
+        list(client.list_buckets(max_results=1))
+        has_gcs_credentials = True
+    except Exception as e:
+        logger.error(f"GCS credentials check failed: {str(e)}")
+    
+    # Check if model is loaded
+    model_status = "loaded" if trained_model is not None else "not_loaded"
+    
+    # Check if local model file exists
+    local_model_exists = os.path.exists('trained_model.pkl')
+    
+    # Get environment information
+    env_info = {
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "environment_variables": {
+            k: v for k, v in os.environ.items() 
+            if k in ['GCS_BUCKET_NAME', 'GOOGLE_CLOUD_PROJECT', 'PORT']
+        }
+    }
+    
+    return jsonify({
+        "status": "healthy",
+        "message": "System check completed",
+        "model_status": model_status,
+        "local_model_exists": local_model_exists,
+        "gcs_credentials_valid": has_gcs_credentials,
+        "environment": env_info,
+        "timestamp": datetime.datetime.now().isoformat()
+    })
+
+@app.route('/api/test', methods=['GET'])
+def test_route():
+    """
+    Simple test endpoint that doesn't rely on model
+    """
+    return jsonify({
+        "status": "success",
+        "message": "API is working",
+        "timestamp": datetime.datetime.now().isoformat()
     })
 
 # API prediction endpoint
@@ -480,8 +560,3 @@ def predict():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
-
-
-
