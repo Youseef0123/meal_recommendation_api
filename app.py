@@ -27,117 +27,140 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 # Global variable to store the trained model
 trained_model = None
 
-# Load the trained model
+# استيراد وظائف التخزين السحابي
+from utils.gcs_storage import load_model_from_gcs
+
+# اسم الخزانة (Bucket)
+GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'global-sun-456710-13-models')
+
+# تحميل النموذج المدرب
+trained_model = None
 model_path = 'trained_model.pkl'
-if os.path.exists(model_path):
+if os.environ.get('GOOGLE_CLOUD_PROJECT'):
+    # محاولة تحميل النموذج من Google Cloud Storage
     try:
-        with open(model_path, 'rb') as f:
-            trained_model = pickle.load(f)
-        logger.info(f"Successfully loaded trained model from {model_path}")
-        
-        # Add the missing get_meal_nutrition method to the model
-        if not hasattr(trained_model, 'get_meal_nutrition'):
-            logger.warning("Adding missing get_meal_nutrition method to the model")
-            
-            def get_meal_nutrition(self, meal_name, meal_type):
-                """
-                Get nutritional information for a meal
-                
-                Args:
-                    meal_name (str): Name of the meal
-                    meal_type (str): Type of meal (breakfast, lunch, dinner, snack)
-                    
-                Returns:
-                    dict: Nutritional information
-                """
-                # Safety check for raw_data
-                if self.raw_data is None:
-                    return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
-                    
-                # Define column mappings for each meal type
-                nutrition_columns = {
-                    'breakfast': {
-                        'calories': 'Breakfast Calories',
-                        'protein': 'Breakfast Protein',
-                        'carbs': 'Breakfast Carbohydrates',
-                        'fats': 'Breakfast Fats'
-                    },
-                    'lunch': {
-                        'calories': 'Lunch Calories',
-                        'protein': 'Lunch Protein',
-                        'carbs': 'Lunch Carbohydrates',
-                        'fats': 'Lunch Fats'
-                    },
-                    'dinner': {
-                        'calories': 'Dinner Calories',
-                        'protein': 'Dinner Protein.1',
-                        'carbs': 'Dinner Carbohydrates.1',
-                        'fats': 'Dinner Fats'
-                    },
-                    'snack': {
-                        'calories': 'Snacks Calories',
-                        'protein': 'Snacks Protein',
-                        'carbs': 'Snacks Carbohydrates',
-                        'fats': 'Snacks Fats'
-                    }
-                }
-                
-                # Safety check
-                if meal_type.lower() not in nutrition_columns:
-                    return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
-                
-                meal_col = f"{meal_type.capitalize()} Suggestion"
-                if meal_type.lower() == 'snack':
-                    meal_col = "Snack Suggestion"
-                    
-                # Normalize meal name for case-insensitive lookup
-                meal_name = str(meal_name).lower().strip()
-                    
-                # Find the meal in the dataset - using normalized meal name
-                try:
-                    # Create a normalized column for comparison
-                    normalized_col = f"{meal_col}_normalized"
-                    temp_df = self.raw_data.copy()
-                    temp_df[normalized_col] = temp_df[meal_col].str.lower().str.strip()
-                    
-                    # Find matching meals
-                    meal_rows = temp_df[temp_df[normalized_col] == meal_name]
-                    
-                    if len(meal_rows) == 0:
-                        # Try fuzzy matching if exact match fails
-                        meal_rows = temp_df[temp_df[normalized_col].str.contains(meal_name, na=False)]
-                    
-                    if len(meal_rows) == 0:
-                        return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
-                    
-                    # Get the first instance of this meal and extract nutrition info
-                    meal_row = meal_rows.iloc[0]
-                    cols = nutrition_columns[meal_type.lower()]
-                    
-                    # Handle missing values gracefully
-                    calories = meal_row[cols['calories']] if cols['calories'] in meal_row and pd.notna(meal_row[cols['calories']]) else 0
-                    protein = meal_row[cols['protein']] if cols['protein'] in meal_row and pd.notna(meal_row[cols['protein']]) else 0
-                    carbs = meal_row[cols['carbs']] if cols['carbs'] in meal_row and pd.notna(meal_row[cols['carbs']]) else 0
-                    fats = meal_row[cols['fats']] if cols['fats'] in meal_row and pd.notna(meal_row[cols['fats']]) else 0
-                    
-                    return {
-                        'calories': round(calories) if not np.isnan(calories) else 0,
-                        'protein': round(protein, 1) if not np.isnan(protein) else 0,
-                        'carbs': round(carbs, 1) if not np.isnan(carbs) else 0,
-                        'fats': round(fats, 1) if not np.isnan(fats) else 0
-                    }
-                except Exception as e:
-                    logger.error(f"Error getting nutrition for {meal_name}: {e}")
-                    return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
-            
-            # Add the method to the model
-            import types
-            trained_model.get_meal_nutrition = types.MethodType(get_meal_nutrition, trained_model)
-            
+        trained_model = load_model_from_gcs(GCS_BUCKET_NAME)
+        logger.info(f"Successfully loaded trained model from GCS bucket: {GCS_BUCKET_NAME}")
     except Exception as e:
-        logger.error(f"Error loading model from {model_path}: {str(e)}")
+        logger.warning(f"No trained model found in GCS: {str(e)}")
+        # محاولة تحميل من الملف المحلي
+        if os.path.exists(model_path):
+            try:
+                with open(model_path, 'rb') as f:
+                    trained_model = pickle.load(f)
+                logger.info(f"Successfully loaded trained model from local file")
+            except Exception as e:
+                logger.error(f"Error loading model from local file: {str(e)}")
 else:
-    logger.warning(f"No trained model found at {model_path}")
+    # تحميل النموذج المحلي (للتطوير المحلي)
+    if os.path.exists(model_path):
+        try:
+            with open(model_path, 'rb') as f:
+                trained_model = pickle.load(f)
+            logger.info(f"Successfully loaded trained model from {model_path}")
+        except Exception as e:
+            logger.error(f"Error loading model from {model_path}: {str(e)}")
+    else:
+        logger.warning(f"No trained model found at {model_path}")
+
+# Add the missing get_meal_nutrition method to the model
+if trained_model is not None and not hasattr(trained_model, 'get_meal_nutrition'):
+    logger.warning("Adding missing get_meal_nutrition method to the model")
+    
+    def get_meal_nutrition(self, meal_name, meal_type):
+        """
+        Get nutritional information for a meal
+        
+        Args:
+            meal_name (str): Name of the meal
+            meal_type (str): Type of meal (breakfast, lunch, dinner, snack)
+            
+        Returns:
+            dict: Nutritional information
+        """
+        # Safety check for raw_data
+        if self.raw_data is None:
+            return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
+            
+        # Define column mappings for each meal type
+        nutrition_columns = {
+            'breakfast': {
+                'calories': 'Breakfast Calories',
+                'protein': 'Breakfast Protein',
+                'carbs': 'Breakfast Carbohydrates',
+                'fats': 'Breakfast Fats'
+            },
+            'lunch': {
+                'calories': 'Lunch Calories',
+                'protein': 'Lunch Protein',
+                'carbs': 'Lunch Carbohydrates',
+                'fats': 'Lunch Fats'
+            },
+            'dinner': {
+                'calories': 'Dinner Calories',
+                'protein': 'Dinner Protein.1',
+                'carbs': 'Dinner Carbohydrates.1',
+                'fats': 'Dinner Fats'
+            },
+            'snack': {
+                'calories': 'Snacks Calories',
+                'protein': 'Snacks Protein',
+                'carbs': 'Snacks Carbohydrates',
+                'fats': 'Snacks Fats'
+            }
+        }
+        
+        # Safety check
+        if meal_type.lower() not in nutrition_columns:
+            return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
+        
+        meal_col = f"{meal_type.capitalize()} Suggestion"
+        if meal_type.lower() == 'snack':
+            meal_col = "Snack Suggestion"
+            
+        # Normalize meal name for case-insensitive lookup
+        meal_name = str(meal_name).lower().strip()
+            
+        # Find the meal in the dataset - using normalized meal name
+        try:
+            # Create a normalized column for comparison
+            normalized_col = f"{meal_col}_normalized"
+            temp_df = self.raw_data.copy()
+            temp_df[normalized_col] = temp_df[meal_col].str.lower().str.strip()
+            
+            # Find matching meals
+            meal_rows = temp_df[temp_df[normalized_col] == meal_name]
+            
+            if len(meal_rows) == 0:
+                # Try fuzzy matching if exact match fails
+                meal_rows = temp_df[temp_df[normalized_col].str.contains(meal_name, na=False)]
+            
+            if len(meal_rows) == 0:
+                return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
+            
+            # Get the first instance of this meal and extract nutrition info
+            meal_row = meal_rows.iloc[0]
+            cols = nutrition_columns[meal_type.lower()]
+            
+            # Handle missing values gracefully
+            calories = meal_row[cols['calories']] if cols['calories'] in meal_row and pd.notna(meal_row[cols['calories']]) else 0
+            protein = meal_row[cols['protein']] if cols['protein'] in meal_row and pd.notna(meal_row[cols['protein']]) else 0
+            carbs = meal_row[cols['carbs']] if cols['carbs'] in meal_row and pd.notna(meal_row[cols['carbs']]) else 0
+            fats = meal_row[cols['fats']] if cols['fats'] in meal_row and pd.notna(meal_row[cols['fats']]) else 0
+            
+            return {
+                'calories': round(calories) if not np.isnan(calories) else 0,
+                'protein': round(protein, 1) if not np.isnan(protein) else 0,
+                'carbs': round(carbs, 1) if not np.isnan(carbs) else 0,
+                'fats': round(fats, 1) if not np.isnan(fats) else 0
+            }
+        except Exception as e:
+            logger.error(f"Error getting nutrition for {meal_name}: {e}")
+            return {'calories': 0, 'protein': 0, 'carbs': 0, 'fats': 0}
+    
+    # Add the method to the model
+    import types
+    trained_model.get_meal_nutrition = types.MethodType(get_meal_nutrition, trained_model)
 
 # Helper function to convert NumPy types to Python types for JSON serialization
 def convert_to_serializable(obj):
@@ -457,5 +480,6 @@ def predict():
 
 if __name__ == "__main__":
     # Run the app
-    logger.info("Starting Flask application")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # استخدام منفذ من متغير البيئة أو 5000 كقيمة افتراضية
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
